@@ -6,10 +6,11 @@ st.set_page_config(page_title="FaB Checker 2026", page_icon="🛡️")
 # --- 1. DATA LOADING ---
 @st.cache_data
 def load_fab_data():
+    # Primary community-driven card data
     url = "https://raw.githubusercontent.com/the-fab-cube/flesh-and-blood-cards/master/json/english/card.json"
     return requests.get(url).json()
 
-# --- 2. MAIN SEARCH ---
+# --- 2. MAIN APP ---
 st.title("🛡️ FaB Price & Card Checker")
 user_input = st.text_input("Search Card Name:", placeholder="e.g. Valiant Dynamo")
 
@@ -18,7 +19,7 @@ if user_input:
     matches = [c for c in all_cards if user_input.lower() in c['name'].lower()]
     
     if matches:
-        # If multiple cards match (like 'Strike'), pick the first or use a selectbox
+        # If multiple matches (like 'Grains'), pick the best one
         card = matches[0]
         if len(matches) > 1:
             choice = st.selectbox("Multiple found:", [c['name'] for c in matches])
@@ -26,35 +27,34 @@ if user_input:
 
         col1, col2 = st.columns([1, 1])
         
+        # Pulling info from the first printing available
+        printings = card.get('printings', [])
+        first_print = printings[0] if printings else {}
+        
         with col1:
-            # IMAGE LOGIC: Dive into the first printing
-            printings = card.get('printings', [])
-            if printings:
-                # We use the 'unique_id' from the first printing for the image
-                img_id = printings[0].get('unique_id', 'unknown')
-                img_url = f"https://api.fabrary.net/v1/cards/image/{img_id}.png"
-                st.image(img_url, width="stretch", caption=card['name'])
-            else:
-                st.warning("No printing data found for this card.")
+            # IMAGE FIX: Use the printing's unique_id instead of the card's 0 ID
+            img_id = first_print.get('unique_id', 'unknown')
+            img_url = f"https://api.fabrary.net/v1/cards/image/{img_id}.png"
+            st.image(img_url, width="stretch", caption=card['name'])
             
         with col2:
             st.header(card['name'])
             
-            # PRICE LINK (TCGplayer)
+            # PRICE LINK
             st.subheader("💰 TCGplayer Prices")
             clean_name = card['name'].replace(" ", "+")
             tcg_url = f"https://www.tcgplayer.com/search/flesh-and-blood-tcg/product?q={clean_name}"
             st.link_button("View Real-Time Prices", tcg_url)
             
-            # DESCRIPTION & STATS
+            # TEXT & STATS FIX
             st.divider()
-            # Most cards have 'text', but heroes might use 'description'
-            desc = card.get('text', card.get('description', 'No text available.'))
-            st.write(f"**Card Text:** {desc}")
+            # Check card level first, then printing level for text
+            card_text = card.get('text', first_print.get('text', 'No card text found.'))
+            st.write(f"**Card Text:** {card_text}")
             st.write(f"**Type:** {card.get('type_text', 'N/A')}")
             
-            # Debugging Tool (Hidden by default)
-            with st.expander("🛠️ Debug Raw Data"):
-                st.write(card)
+            # Helpful Debug (Hidden)
+            with st.expander("🛠️ View Raw Card Data"):
+                st.json(card)
     else:
         st.error("No card found. Try a different name!")
