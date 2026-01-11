@@ -1,35 +1,80 @@
 import streamlit as st
-import pandas as pd
 import requests
+import pandas as pd
 
-# 1. Load the Price Data from TCGCSV
-@st.cache_data(ttl=3600) # Refreshes once per hour
-def get_tcg_prices():
-    # Category 62 is usually Flesh and Blood on TCGplayer
-    url = "https://tcgcsv.com/categories/62/prices" 
-    # This reads the live price list into a table
-    df = pd.read_csv(url)
-    return df
+st.set_page_config(page_title="FaB Tracker 2026", page_icon="🛡️")
 
-# 2. Update your search logic
+# --- 1. INITIALIZE COLLECTION ---
+if 'my_collection' not in st.session_state:
+    st.session_state.my_collection = []
+
+# --- 2. SIDEBAR ---
+with st.sidebar:
+    st.header("🎴 My Collection")
+    for item in st.session_state.my_collection:
+        st.write(f"✅ {item}")
+    if st.button("Clear All"):
+        st.session_state.my_collection = []
+        st.rerun()
+
+# --- 3. PRICE DATA (TCGCSV) ---
+@st.cache_data(ttl=3600)
+def load_prices():
+    # Category 62 is Flesh and Blood
+    url = "https://tcgcsv.com/categories/62/prices"
+    try:
+        return pd.read_csv(url)
+    except:
+        return None
+
+# --- 4. MAIN SEARCH ---
+st.title("🛡️ FaB Price Checker")
+# We MUST define 'query' before we use 'if query:'
+query = st.text_input("Search for a card:", placeholder="e.g. Command and Conquer")
+
+@st.cache_data
+def load_card_data():
+    url = "https://raw.githubusercontent.com/the-fab-cube/flesh-and-blood-cards/master/json/english/card.json"
+    return requests.get(url).json()
+
 if query:
-    all_cards = load_data() # Your existing function
-    price_df = get_tcg_prices()
-    
-    matches = [c for c in all_cards if query.lower() in c['name'].lower()]
+    cards = load_card_data()
+    prices = load_prices()
+    matches = [c for c in cards if query.lower() in c['name'].lower()]
     
     if matches:
         card = matches[0]
-        # Match the card to its price using the TCGplayer ID
-        # Many FaB datasets store this under 'tcgplayer_id' or 'product_id'
-        tcg_id = card.get('tcgplayer_id') 
+        col1, col2 = st.columns([1, 1])
         
-        if tcg_id:
-            # Find the row in the price table that matches our card
-            card_price_row = price_df[price_df['productId'] == tcg_id]
+        with col1:
+            # FIXED: Updated for 2026 Streamlit standards
+            img_id = card.get('unique_id', 'unknown')
+            img_url = f"https://api.fabrary.net/v1/cards/image/{img_id}.png"
+            st.image(img_url, width="stretch")
             
-            if not card_price_row.empty:
-                market_price = card_price_row.iloc[0]['marketPrice']
-                st.metric(label="Market Price", value=f"${market_price:.2f}")
+        with col2:
+            st.header(card['name'])
+            
+            # AUTOMATIC PRICE (TCGCSV)
+            st.subheader("💰 Live Market Price")
+            product_id = card.get('tcgplayer_id')
+            
+            if prices is not None and product_id:
+                row = prices[prices['productId'] == product_id]
+                if not row.empty:
+                    mkt = row.iloc[0]['marketPrice']
+                    st.metric("TCGplayer Market", f"${mkt:.2f}")
+                else:
+                    st.write("Price data not found for this specific printing.")
             else:
-                st.write("Price not found in today's CSV update.")
+                st.write("Fetching live prices...")
+            
+            if st.button(f"➕ Add to Collection"):
+                if card['name'] not in st.session_state.my_collection:
+                    st.session_state.my_collection.append(card['name'])
+                    st.rerun()
+            
+            st.divider()
+            st.write(f"**Text:** {card.get('text', 'N/A')}")
+    else:
+        st.warning("Card not found!")
