@@ -1,38 +1,57 @@
 import streamlit as st
 import requests
 
-st.set_page_config(page_title="FaB Price Checker", layout="wide")
+st.set_page_config(page_title="FaB Tracker", page_icon="🛡️")
 
+# --- INITIALIZE COLLECTION ---
+# This creates a "hidden list" that stays active while you use the app
+if 'my_collection' not in st.session_state:
+    st.session_state.my_collection = []
+
+# --- SIDEBAR COLLECTION VIEW ---
+with st.sidebar:
+    st.header("🎴 My Collection")
+    if not st.session_state.my_collection:
+        st.write("Your list is empty!")
+    for item in st.session_state.my_collection:
+        st.write(f"- {item}")
+    
+    if st.button("Clear Collection"):
+        st.session_state.my_collection = []
+        st.rerun()
+
+# --- MAIN APP ---
 st.title("🛡️ Flesh and Blood Price Checker")
-st.write("Enter a card name to see current TCGplayer market prices.")
+query = st.text_input("Search for a card:", placeholder="e.g. Art of War")
 
-# 1. Search Bar
-card_query = st.text_input("Card Name", placeholder="e.g. Command and Conquer")
+@st.cache_data
+def load_fab_data():
+    url = "https://raw.githubusercontent.com/the-fab-cube/flesh-and-blood-cards/master/json/english/card.json"
+    return requests.get(url).json()
 
-if card_query:
-    # 2. Get Card Data (using The FAB Cube/Open Source data)
-    # For this hack, we'll use a direct search link to fetch the card details
-    search_url = f"https://api.scryfall.com/cards/search?q={card_query}" # Placeholder logic
+if query:
+    all_cards = load_fab_data()
+    results = [c for c in all_cards if query.lower() in c['name'].lower()]
     
-    # NOTE: In a full app, we would use the FAB Cube JSON. 
-    # For now, let's simulate the display layout:
-    
-    col1, col2 = st.columns([1, 2])
-    
-    with col1:
-        # Displaying a sample card image from FABDB logic
-        st.image("https://storage.googleapis.com/fabmaster/media/images/WTR156.width-450.png", caption="Card Art")
+    if results:
+        card = results[0]
+        col1, col2 = st.columns([1, 2])
         
-    with col2:
-        st.subheader(f"Results for: {card_query}")
-        st.info("**TCGplayer Market Price:** $85.50")
-        
-        # Create a simple table for variations
-        price_data = {
-            "Finish": ["Non-Foil", "Rainbow Foil", "Cold Foil"],
-            "Market Price": ["$85.50", "$120.00", "$450.00"],
-            "Low": ["$80.00", "$110.00", "$425.00"]
-        }
-        st.table(price_data)
-        
-        st.button("View on TCGplayer")
+        with col1:
+            # Using Fabrary as a more reliable image source
+            img_id = card.get('printings', [{}])[0].get('unique_id', card.get('unique_id'))
+            st.image(f"https://api.fabrary.net/v1/cards/image/{img_id}.png", use_container_width=True)
+            
+        with col2:
+            st.header(card['name'])
+            
+            # THE ADD BUTTON
+            if st.button(f"➕ Add {card['name']} to Collection"):
+                if card['name'] not in st.session_state.my_collection:
+                    st.session_state.my_collection.append(card['name'])
+                    st.toast(f"Added {card['name']}!")
+                    st.rerun()
+
+            st.divider()
+            tcg_url = f"https://www.tcgplayer.com/search/flesh-and-blood-tcg/product?q={card['name'].replace(' ', '+')}"
+            st.link_button("🎯 View Live Prices on TCGplayer", tcg_url)
