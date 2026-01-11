@@ -1,7 +1,7 @@
 import streamlit as st
 import requests
 
-st.set_page_config(page_title="FaB Checker 2026", page_icon="🛡️")
+st.set_page_config(page_title="FaB Tracker 2026", page_icon="🛡️")
 
 # --- 1. DATA LOADING ---
 @st.cache_data
@@ -19,7 +19,7 @@ if user_input:
     matches = [c for c in all_cards if user_input.lower() in c['name'].lower()]
     
     if matches:
-        # If multiple matches (like 'Grains'), pick the best one
+        # If multiple matches, pick the best one
         card = matches[0]
         if len(matches) > 1:
             choice = st.selectbox("Multiple found:", [c['name'] for c in matches])
@@ -27,12 +27,12 @@ if user_input:
 
         col1, col2 = st.columns([1, 1])
         
-        # Pulling info from the first printing available
+        # --- THE FIX: DRILLING INTO PRINTINGS ---
         printings = card.get('printings', [])
         first_print = printings[0] if printings else {}
         
         with col1:
-            # IMAGE FIX: Use the printing's unique_id instead of the card's 0 ID
+            # Use the printing's unique_id instead of the card's 0 ID
             img_id = first_print.get('unique_id', 'unknown')
             img_url = f"https://api.fabrary.net/v1/cards/image/{img_id}.png"
             st.image(img_url, width="stretch", caption=card['name'])
@@ -48,12 +48,12 @@ if user_input:
             
             # TEXT & STATS FIX
             st.divider()
-            # Check card level first, then printing level for text
-            card_text = card.get('text', first_print.get('text', 'No card text found.'))
+            # Some cards put text on the main entry, others inside printings
+            card_text = card.get('text') or first_print.get('text') or "No card text found."
             st.write(f"**Card Text:** {card_text}")
             st.write(f"**Type:** {card.get('type_text', 'N/A')}")
             
-            # Helpful Debug (Hidden)
+            # Helpful Debug (Hidden by default)
             with st.expander("🛠️ View Raw Card Data"):
                 st.json(card)
     else:
