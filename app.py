@@ -1,62 +1,56 @@
 import streamlit as st
 import requests
-import pandas as pd
 
-st.set_page_config(page_title="FaB Checker 2026", page_icon="🛡️")
+st.set_page_config(page_title="FaB Checker", page_icon="🛡️")
 
-# --- 1. SEARCH LOGIC ---
-st.title("🛡️ FaB Price Checker")
-user_input = st.text_input("Enter Card Name:", placeholder="e.g. Enlightened Strike")
-
+# --- 1. DATA LOADING ---
 @st.cache_data
-def load_all_cards():
-    # This is the gold standard for FaB card data
+def load_fab_data():
+    # Using the most reliable open-source card database
     url = "https://raw.githubusercontent.com/the-fab-cube/flesh-and-blood-cards/master/json/english/card.json"
     return requests.get(url).json()
 
+# --- 2. MAIN APP ---
+st.title("🛡️ FaB Price & Card Checker")
+user_input = st.text_input("Search Card Name:", placeholder="e.g. Command and Conquer")
+
 if user_input:
-    all_cards = load_all_cards()
-    
-    # "Fuzzy" search: finds the card even if you only type part of the name
+    all_cards = load_fab_data()
+    # Find all cards that contain the user's text
     matches = [c for c in all_cards if user_input.lower() in c['name'].lower()]
     
     if matches:
-        # If multiple cards match, let the user pick from a dropdown
+        # If many cards match, let the user choose
         if len(matches) > 1:
-            st.write(f"Found {len(matches)} matches. Please select one:")
-            card_names = [c['name'] for c in matches]
-            selected_name = st.selectbox("Select Card:", card_names)
-            card = next(c for c in matches if c['name'] == selected_name)
+            choice = st.selectbox("Multiple found, please select:", [c['name'] for c in matches])
+            card = next(c for c in matches if c['name'] == choice)
         else:
             card = matches[0]
 
         col1, col2 = st.columns([1, 1])
         
         with col1:
-            # Try to show the image using the most common URL format
-            img_id = card.get('unique_id', '0')
+            # IMAGE FIX: Use the first printing's ID for the image
+            # This is the most reliable way to hit the Fabrary image server
+            printings = card.get('printings', [{}])
+            img_id = printings[0].get('id', 'unknown') if printings else 'unknown'
             img_url = f"https://api.fabrary.net/v1/cards/image/{img_id}.png"
+            
             st.image(img_url, width="stretch", caption=card['name'])
             
         with col2:
             st.header(card['name'])
             
-            # --- 2. THE PRICE SOLUTION ---
+            # PRICE FIX: Clean search link
             st.subheader("💰 Price Check")
-            st.write("Live prices from TCGplayer (Open in new tab):")
+            clean_name = card['name'].replace(" ", "+")
+            tcg_url = f"https://www.tcgplayer.com/search/flesh-and-blood-tcg/product?q={clean_name}"
+            st.link_button("View Prices on TCGplayer", tcg_url)
             
-            # Create a clean search link
-            search_query = card['name'].replace(" ", "+")
-            tcg_url = f"https://www.tcgplayer.com/search/flesh-and-blood-tcg/product?q={search_query}"
-            
-            st.link_button("🚀 View TCGplayer Prices", tcg_url)
-            
-            # Add a manual price tracker for your collection
-            price_guess = st.number_input("Found a price? Track it here:", value=0.0)
-            if st.button("Add to Collection"):
-                st.success(f"Saved {card['name']} at ${price_guess}!")
-                
+            # DESCRIPTION FIX: Pulling from the correct data field
             st.divider()
-            st.write(f"**Description:** {card.get('text', 'N/A')}")
+            card_text = card.get('text', card.get('description', 'No text available.'))
+            st.write(f"**Card Text:** {card_text}")
+            st.write(f"**Type:** {card.get('type_text', 'N/A')}")
     else:
-        st.error(f"Could not find '{user_input}'. Try a shorter part of the name!")
+        st.error("No card found. Try a shorter search term!")
