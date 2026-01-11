@@ -6,9 +6,26 @@ st.set_page_config(page_title="FaB Checker 2026", page_icon="🛡️")
 # --- 1. DATA LOADING ---
 @st.cache_data
 def load_fab_data():
-    # This is the exact source your app is currently using
     url = "https://raw.githubusercontent.com/the-fab-cube/flesh-and-blood-cards/master/json/english/card.json"
     return requests.get(url).json()
+
+def get_price(card_name):
+    try:
+        # TCGCSV is a community tool that pulls real TCGplayer prices
+        # We search category 62 (Flesh and Blood) for your card name
+        search_url = f"https://tcgcsv.com/tcgplayer/62/search?q={card_name.replace(' ', '%20')}"
+        results = requests.get(search_url).json().get('results', [])
+        if results:
+            product_id = results[0].get('productId')
+            # Now we get the specific price for that product ID
+            price_url = f"https://tcgcsv.com/tcgplayer/62/product/{product_id}/prices"
+            price_data = requests.get(price_url).json().get('results', [])
+            if price_data:
+                # Returns the Market Price
+                return f"${price_data[0].get('marketPrice', 'N/A')}"
+    except:
+        return "Price Unavailable"
+    return "N/A"
 
 # --- 2. MAIN APP ---
 st.title("🛡️ FaB Price & Card Checker")
@@ -19,7 +36,6 @@ if user_input:
     matches = [c for c in all_cards if user_input.lower() in c['name'].lower()]
     
     if matches:
-        # Select the card
         card = matches[0]
         if len(matches) > 1:
             choice = st.selectbox("Multiple found:", [c['name'] for c in matches])
@@ -27,38 +43,34 @@ if user_input:
 
         col1, col2 = st.columns([1, 1])
         
-        # --- THE DATA DRILL ---
-        # Your screenshot shows info is inside 'printings' -> 0
+        # Pulling printing info for the image
         printings = card.get('printings', [])
         first_print = printings[0] if printings else {}
         
         with col1:
-            # IMAGE FIX: Use the 'image_url' directly from your screenshot!
+            # We use the 'image_url' that we know works from your screenshot
             img_url = first_print.get('image_url')
             if img_url:
                 st.image(img_url, width="stretch", caption=card['name'])
-            else:
-                st.warning("No image URL found in the database.")
             
         with col2:
             st.header(card['name'])
             
-            # PRICE LINK
-            st.subheader("💰 TCGplayer Prices")
+            # --- THE PRICE FIX ---
+            st.subheader("💰 Market Price")
+            current_price = get_price(card['name'])
+            st.metric(label="TCGplayer Market", value=current_price)
+            
             clean_name = card['name'].replace(" ", "+")
             tcg_url = f"https://www.tcgplayer.com/search/flesh-and-blood-tcg/product?q={clean_name}"
-            st.link_button("View Live Prices", tcg_url)
+            st.link_button("Buy on TCGplayer", tcg_url)
             
-            # TEXT FIX: Pulling 'text' or 'flavor_text'
+            # --- THE TEXT FIX ---
             st.divider()
-            # We look at 'text' first, then 'description'
-            display_text = card.get('text') or first_print.get('text') or "No ability text found."
+            # FAB Cube data sometimes uses 'description' for the actual card rules
+            display_text = card.get('text') or first_print.get('text') or card.get('description') or "Check card image for rules."
             st.write(f"**Card Text:** {display_text}")
-            
-            # Show Type
             st.write(f"**Type:** {card.get('type_text', 'N/A')}")
             
-            if st.button("Add to Collection"):
-                st.success(f"Added {card['name']}!")
     else:
         st.error("No card found. Try a shorter name!")
